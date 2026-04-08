@@ -1,0 +1,92 @@
+spec_version: 1
+name: GymCompanion-Env
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+description: >
+  Physiological Simulator for Health-Tech AI Agents.
+  Models a virtual human client's physiology — fitness capacity, CNS fatigue,
+  and per-muscle-group soreness — so an AI personal-trainer agent can learn
+  optimal workout programming through reinforcement learning.
+
+observation_space:
+  fitness_capacity:
+    type: float
+    range: [0.0, 100.0]
+    description: "Overall fitness capacity (0 = sedentary, 100 = elite athlete)."
+  cns_fatigue:
+    type: float
+    range: [0.0, 1.0]
+    description: "Central Nervous System fatigue (0 = recovered, 1 = exhausted)."
+  muscle_soreness:
+    type: dict
+    keys: ["legs", "push", "pull"]
+    value_range: [0.0, 1.0]
+    description: "Per-muscle-group soreness (0 = fresh, 1 = maximal DOMS)."
+  days_active:
+    type: int
+    description: "Consecutive days the client has been in the program."
+
+action_space:
+  workout_category:
+    type: enum
+    values: ["rest", "liss_cardio", "hiit", "hypertrophy", "strength"]
+    description: "Type of workout session prescribed by the trainer."
+  target_muscle:
+    type: enum
+    values: ["none", "legs", "push", "pull", "full_body"]
+    description: "Muscle group to target in this session."
+  intensity_rpe:
+    type: int
+    range: [1, 10]
+    description: "Rate of Perceived Exertion (1 = easy, 10 = maximal)."
+
+tasks:
+  - id: couch-to-5k
+    name: "Couch to 5K"
+    difficulty: easy
+    description: >
+      Guide a completely sedentary client (fitness_capacity ≈ 20) to the point
+      where they can comfortably run 5 km. The agent must gradually build
+      aerobic capacity while avoiding injury and excessive soreness.
+    initial_conditions:
+      fitness_capacity: 20.0
+      cns_fatigue: 0.0
+      muscle_soreness: { "legs": 0.0, "push": 0.0, "pull": 0.0 }
+    success_criteria:
+      fitness_capacity_gte: 55.0
+      max_cns_fatigue: 0.6
+
+  - id: plateau-breaker
+    name: "Plateau Breaker"
+    difficulty: medium
+    description: >
+      An intermediate client (fitness_capacity ≈ 60) has stalled. The agent
+      must periodise training — cycling intensity and modalities — to push
+      past the plateau without overtraining.
+    initial_conditions:
+      fitness_capacity: 60.0
+      cns_fatigue: 0.3
+      muscle_soreness: { "legs": 0.2, "push": 0.2, "pull": 0.2 }
+    success_criteria:
+      fitness_capacity_gte: 80.0
+      max_cns_fatigue: 0.7
+
+  - id: injury-rehab
+    name: "Injury Rehab"
+    difficulty: hard
+    description: >
+      A client is recovering from a leg injury (high leg soreness, moderate
+      CNS fatigue, reduced fitness). The agent must rehabilitate the client —
+      rebuilding leg strength while keeping soreness manageable — without
+      causing re-injury or neglecting upper-body maintenance.
+    initial_conditions:
+      fitness_capacity: 40.0
+      cns_fatigue: 0.5
+      muscle_soreness: { "legs": 0.8, "push": 0.1, "pull": 0.1 }
+    success_criteria:
+      fitness_capacity_gte: 65.0
+      max_leg_soreness: 0.3
+      max_cns_fatigue: 0.6
