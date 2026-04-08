@@ -14,8 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install openenv-core uvicorn fastapi  # Ensuring core OpenEnv dependencies are present
 
 # Copy the rest of the application
-# We need the models, the YAML, and the server logic
+# We need the models, the YAML, the README, and the server logic
 COPY openenv.yaml /app/
+COPY README.md /app/
 COPY models.py /app/
 COPY server/ /app/server/
 

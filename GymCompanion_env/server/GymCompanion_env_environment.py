@@ -77,7 +77,7 @@ class GymcompanionEnvironment(Environment):
         if task_name == "couch-to-5k":
             self._target_max_reward = 16.5  # Assumes mostly growth days
             self._physiology = PhysiologyState(
-                fitness_capacity=5.0,
+                fitness_capacity=20.0,
                 cns_fatigue=0.0,
                 muscle_soreness={"legs": 0.0, "push": 0.0, "pull": 0.0}
             )
@@ -85,15 +85,15 @@ class GymcompanionEnvironment(Environment):
             self._target_max_reward = 14.0  # Requires initial rest, then growth
             self._physiology = PhysiologyState(
                 fitness_capacity=60.0,
-                cns_fatigue=0.8,
-                muscle_soreness={"legs": 0.4, "push": 0.4, "pull": 0.4}
+                cns_fatigue=0.3,
+                muscle_soreness={"legs": 0.2, "push": 0.2, "pull": 0.2}
             )
         elif task_name == "injury-rehab":
             self._target_max_reward = 10.0  # Requires heavy rest and light work
             self._physiology = PhysiologyState(
                 fitness_capacity=40.0,
-                cns_fatigue=0.2,
-                muscle_soreness={"legs": 0.9, "push": 0.1, "pull": 0.1}
+                cns_fatigue=0.5,
+                muscle_soreness={"legs": 0.8, "push": 0.1, "pull": 0.1}
             )
         else:
             self._target_max_reward = 16.5

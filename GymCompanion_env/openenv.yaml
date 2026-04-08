@@ -3,7 +3,7 @@ name: GymCompanion-Env
 type: space
 runtime: fastapi
 app: server.app:app
-port: 8000
+port: 7860
 
 description: >
   Physiological Simulator for Health-Tech AI Agents.
