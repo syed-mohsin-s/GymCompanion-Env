@@ -11,6 +11,7 @@ tags:
   - openenv
   - health-tech
   - reinforcement-learning
+  - gym
 ---
 
 # GymCompanion-Env
@@ -122,10 +123,12 @@ Each step simulates one day:
 
 ```bash
 # From project root
-docker build -t GymCompanion_env-env:latest -f server/Dockerfile .
+docker build -t GymCompanion_env:latest .
 ```
 
 ## Deploying to Hugging Face Spaces
+
+**Live Deployment:** [GymCompanion-Env on Hugging Face Spaces](https://huggingface.co/spaces/syedmohsin7/GymCompanion-Env)
 
 ```bash
 # From the environment directory (where openenv.yaml is located)
@@ -152,7 +155,7 @@ The `openenv push` command will:
 - `--private`: Deploy the space as private (default: public)
 
 After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
+`https://huggingface.co/spaces/syedmohsin7/GymCompanion-Env`
 
 The deployed space includes:
 - **Web Interface** at `/web` - Interactive UI for exploring the environment
@@ -263,9 +266,11 @@ GymCompanion_env/
 ├── uv.lock                # Locked dependencies (generated)
 ├── client.py              # GymcompanionEnv WebSocket client
 ├── models.py              # Observation, Action, and Enum models
+├── Dockerfile             # Container image definition
 └── server/
     ├── __init__.py        # Server module exports
     ├── GymCompanion_env_environment.py  # Physiological simulator
+    ├── physiology_engine.py # Physiology mechanics
     ├── app.py             # FastAPI application (HTTP + WebSocket)
-    └── Dockerfile         # Container image definition
+    └── requirements.txt   # Server dependencies
 ```
