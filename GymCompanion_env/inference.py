@@ -48,73 +48,85 @@ async def run_inference():
     for task_name in tasks:
         log_start(task_name, MODEL_NAME)
 
-        async with GymcompanionEnv(base_url=env_url) as env:
-            result = await env.reset(task_name=task_name)
-            
-            done = False
-            step = 0
-            MAX_STEPS = 30
-            rewards = []
-            
-            system_prompt = (
-                "You are an AI Personal Trainer. You receive JSON data about a client's physiology. "
-                "You must output a JSON action dictating their workout. Prioritize recovery if fatigue or soreness is high.\n\n"
-                "Your output must be strict JSON matching this schema:\n"
-                "{\n"
-                '  "workout_category": "rest" | "liss_cardio" | "hiit" | "hypertrophy" | "strength",\n'
-                '  "target_muscle": "none" | "legs" | "push" | "pull" | "full_body",\n'
-                '  "intensity_rpe": <int between 1 and 10>\n'
-                "}"
-            )
-            messages = [{"role": "system", "content": system_prompt}]
-
-            while not done and step < MAX_STEPS:
-                step += 1
-                
-                obs_dict = {
-                    "fitness_capacity": result.observation.fitness_capacity,
-                    "cns_fatigue": result.observation.cns_fatigue,
-                    "muscle_soreness": result.observation.muscle_soreness,
-                    "days_active": result.observation.days_active
-                }
-                messages.append({"role": "user", "content": json.dumps(obs_dict)})
-
-                action_str = ""
-                error_msg = "null"
-                try:
-                    response = await llm_client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=messages,
-                        response_format={"type": "json_object"},
-                        temperature=0.2,
-                    )
+        max_retries = 6
+        for attempt in range(max_retries):
+            try:
+                async with GymcompanionEnv(base_url=env_url) as env:
+                    result = await env.reset(task_name=task_name)
                     
-                    llm_output = response.choices[0].message.content
-                    messages.append({"role": "assistant", "content": llm_output})
+                    done = False
+                    step = 0
+                    MAX_STEPS = 30
+                    rewards = []
                     
-                    action_data = json.loads(llm_output)
-                    action = GymcompanionAction(**action_data)
-                    action_str = json.dumps(action_data)
-                except Exception as e:
-                    action = GymcompanionAction(
-                        workout_category=WorkoutCategory.REST,
-                        target_muscle=TargetMuscle.NONE,
-                        intensity_rpe=1
+                    system_prompt = (
+                        "You are an AI Personal Trainer. You receive JSON data about a client's physiology. "
+                        "You must output a JSON action dictating their workout. Prioritize recovery if fatigue or soreness is high.\n\n"
+                        "Your output must be strict JSON matching this schema:\n"
+                        "{\n"
+                        '  "workout_category": "rest" | "liss_cardio" | "hiit" | "hypertrophy" | "strength",\n'
+                        '  "target_muscle": "none" | "legs" | "push" | "pull" | "full_body",\n'
+                        '  "intensity_rpe": <int between 1 and 10>\n'
+                        "}"
                     )
-                    error_msg = str(e).replace('\n', ' ')
-                    action_str = '{"workout_category": "rest", "target_muscle": "none", "intensity_rpe": 1}'
+                    messages = [{"role": "system", "content": system_prompt}]
 
-                result = await env.step(action)
-                done = result.done
-                rewards.append(result.reward)
-                
-                log_step(step, action_str, result.reward, done, error_msg)
+                    while not done and step < MAX_STEPS:
+                        step += 1
+                        
+                        obs_dict = {
+                            "fitness_capacity": result.observation.fitness_capacity,
+                            "cns_fatigue": result.observation.cns_fatigue,
+                            "muscle_soreness": result.observation.muscle_soreness,
+                            "days_active": result.observation.days_active
+                        }
+                        messages.append({"role": "user", "content": json.dumps(obs_dict)})
 
-            # Evaluate success and final score
-            final_score = result.observation.metadata.get("score", 0.0) if result.observation.metadata else 0.0
-            success = final_score > 0.0
+                        action_str = ""
+                        error_msg = "null"
+                        try:
+                            response = await llm_client.chat.completions.create(
+                                model=MODEL_NAME,
+                                messages=messages,
+                                response_format={"type": "json_object"},
+                                temperature=0.2,
+                            )
+                            
+                            llm_output = response.choices[0].message.content
+                            messages.append({"role": "assistant", "content": llm_output})
+                            
+                            action_data = json.loads(llm_output)
+                            action = GymcompanionAction(**action_data)
+                            action_str = json.dumps(action_data)
+                        except Exception as e:
+                            action = GymcompanionAction(
+                                workout_category=WorkoutCategory.REST,
+                                target_muscle=TargetMuscle.NONE,
+                                intensity_rpe=1
+                            )
+                            error_msg = str(e).replace('\n', ' ')
+                            action_str = '{"workout_category": "rest", "target_muscle": "none", "intensity_rpe": 1}'
 
-            log_end(success, step, final_score, rewards)
+                        result = await env.step(action)
+                        done = result.done
+                        rewards.append(result.reward)
+                        
+                        log_step(step, action_str, result.reward, done, error_msg)
+
+                    # Evaluate success and final score
+                    final_score = result.observation.metadata.get("score", 0.0) if result.observation.metadata else 0.0
+                    success = final_score > 0.0
+
+                    log_end(success, step, final_score, rewards)
+                    break  # Success! Exit the retry loop for this task.
+            except Exception as e:
+                print(f"[RETRY] Task '{task_name}' connection/execution failed (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    print(f"Max retries reached for task '{task_name}'. Skipping.")
+                    log_end(False, 0, 0.0, [])
+                else:
+                    await asyncio.sleep(5)  # Wait giving container time to boot up
+
 
 if __name__ == "__main__":
     asyncio.run(run_inference())
