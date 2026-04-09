@@ -10,9 +10,9 @@ except ImportError:
     from client import GymcompanionEnv
     from models import GymcompanionAction, WorkoutCategory, TargetMuscle
 
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
-HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
 BENCHMARK = "GymCompanion-Env"
 
 def log_start(task_name: str, model_name: str):
@@ -30,13 +30,13 @@ def log_end(success: bool, steps: int, score: float, rewards: list):
     print(f"[END] success={success_str} steps={steps} score={score_str} rewards={rewards_str}")
 
 async def run_inference():
-    if not API_BASE_URL or not MODEL_NAME or not HF_TOKEN:
-        print("Missing required env vars: API_BASE_URL, MODEL_NAME, HF_TOKEN")
+    if not API_BASE_URL or not MODEL_NAME or not API_KEY:
+        print("Missing required env vars: API_BASE_URL, MODEL_NAME, API_KEY")
         return
 
     llm_client = AsyncOpenAI(
         base_url=API_BASE_URL,
-        api_key=HF_TOKEN
+        api_key=API_KEY
     )
 
     env_url = os.environ.get("ENV_BASE_URL", "http://127.0.0.1:8000")
