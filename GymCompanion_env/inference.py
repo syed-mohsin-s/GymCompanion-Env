@@ -30,14 +30,17 @@ def log_end(success: bool, steps: int, score: float, rewards: list):
     print(f"[END] success={success_str} steps={steps} score={score_str} rewards={rewards_str}")
 
 async def run_inference():
-    api_key = os.getenv("API_KEY", HF_TOKEN)
-    if not API_BASE_URL or not MODEL_NAME or not api_key:
+    client_base_url = os.environ.get("API_BASE_URL") or API_BASE_URL or "https://router.huggingface.co/v1"
+    client_api_key = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN") or HF_TOKEN
+    client_model = os.environ.get("MODEL_NAME") or MODEL_NAME or "Qwen/Qwen2.5-72B-Instruct"
+
+    if not client_base_url or not client_model or not client_api_key:
         print("Missing required env vars: API_BASE_URL, MODEL_NAME, HF_TOKEN/API_KEY")
         return
 
     llm_client = AsyncOpenAI(
-        base_url=API_BASE_URL,
-        api_key=api_key
+        base_url=client_base_url,
+        api_key=client_api_key
     )
 
     env_url = os.environ.get("ENV_BASE_URL", "http://127.0.0.1:8000")
@@ -87,19 +90,29 @@ async def run_inference():
                         error_msg = "null"
                         try:
                             response = await llm_client.chat.completions.create(
-                                model=MODEL_NAME,
+                                model=client_model,
                                 messages=messages,
-                                response_format={"type": "json_object"},
                                 temperature=0.2,
                             )
                             
                             llm_output = response.choices[0].message.content
                             messages.append({"role": "assistant", "content": llm_output})
                             
-                            action_data = json.loads(llm_output)
+                            # Safely parse markdown-wrapped JSON the proxy might emit
+                            cleaned_output = llm_output.strip()
+                            if cleaned_output.startswith("```json"):
+                                cleaned_output = cleaned_output[7:]
+                            elif cleaned_output.startswith("```"):
+                                cleaned_output = cleaned_output[3:]
+                            if cleaned_output.endswith("```"):
+                                cleaned_output = cleaned_output[:-3]
+                            cleaned_output = cleaned_output.strip()
+
+                            action_data = json.loads(cleaned_output)
                             action = GymcompanionAction(**action_data)
                             action_str = json.dumps(action_data)
                         except Exception as e:
+                            print(f"[LLM ERROR] Exception during chat.completions or JSON parsing: {e}")
                             action = GymcompanionAction(
                                 workout_category=WorkoutCategory.REST,
                                 target_muscle=TargetMuscle.NONE,
