@@ -35,8 +35,9 @@ async def run_inference():
         api_key=HF_TOKEN
     )
 
-    env_url = os.environ.get("ENV_BASE_URL", "http://localhost:8000")
-    
+    env_url = os.environ.get("ENV_BASE_URL", "http://127.0.0.1:8000")
+    env_url = env_url.replace("localhost", "127.0.0.1")
+
     # Run all 3 core hackathon tasks
     tasks = ["couch-to-5k", "plateau-breaker", "injury-rehab"]
 

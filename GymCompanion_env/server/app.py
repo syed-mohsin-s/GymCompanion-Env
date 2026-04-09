@@ -49,7 +49,7 @@ app = create_app(
     GymcompanionAction,
     GymcompanionObservation,
     env_name="GymCompanion-Env",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    max_concurrent_envs=100,  # increase this number to allow more concurrent WebSocket sessions
 )
 
 
