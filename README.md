@@ -1,3 +1,4 @@
+---
 title: GymCompanion-Env
 emoji: 🏋️
 colorFrom: indigo
