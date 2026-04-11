@@ -10,6 +10,8 @@ description: >
   Models a virtual human client's physiology — fitness capacity, CNS fatigue,
   and per-muscle-group soreness — so an AI personal-trainer agent can learn
   optimal workout programming through reinforcement learning.
+  Features: HIIT/LISS differentiation, periodization bonuses, detraining,
+  CNS super-compensation, and progressive soreness amplification.
 
 observation_space:
   fitness_capacity:
@@ -19,7 +21,7 @@ observation_space:
   cns_fatigue:
     type: float
     range: [0.0, 1.0]
-    description: "Central Nervous System fatigue (0 = recovered, 1 = exhausted)."
+    description: "Central Nervous System fatigue (0 = fully recovered, 1 = exhausted)."
   muscle_soreness:
     type: dict
     keys: ["legs", "push", "pull"]
@@ -27,30 +29,56 @@ observation_space:
     description: "Per-muscle-group soreness (0 = fresh, 1 = maximal DOMS)."
   days_active:
     type: int
-    description: "Consecutive days the client has been in the program."
+    description: "Total active training days completed in the episode."
+  goal_progress:
+    type: float
+    range: [0.0, 1.0]
+    description: "Normalized progress toward task fitness goal (0.0=start, 1.0=goal reached)."
+  days_since_last_rest:
+    type: int
+    description: "Consecutive training days without REST — high values signal overtraining risk."
+  stress_event:
+    type: bool
+    description: "Life-stress event today (10% daily probability). Halves CNS recovery on rest; adds +0.05 CNS on training days."
+  sleep_quality:
+    type: float
+    range: [0.0, 1.0]
+    description: "Quality of last night's sleep. Scales CNS recovery on rest days. ≥0.9 extends super-compensation window."
+  weekly_variety_score:
+    type: float
+    range: [0.0, 1.0]
+    description: "Diversity score of modalities used in last 7 days (unique_count / 5). ≥0.6 indicates good periodization."
 
 action_space:
   workout_category:
     type: enum
     values: ["rest", "liss_cardio", "hiit", "hypertrophy", "strength"]
-    description: "Type of workout session prescribed by the trainer."
+    description: "Type of workout session."
   target_muscle:
     type: enum
     values: ["none", "legs", "push", "pull", "full_body"]
-    description: "Muscle group to target in this session."
+    description: "Muscle group to target. Use 'none' for rest/pure cardio."
   intensity_rpe:
     type: int
     range: [1, 10]
-    description: "Rate of Perceived Exertion (1 = easy, 10 = maximal)."
+    description: "Rate of Perceived Exertion (1=easy, 10=maximal). Growth zone is RPE 6-8."
+  nutrition_protocol:
+    type: enum
+    values: ["maintenance", "surplus", "deficit", "high_protein"]
+    default: "maintenance"
+    description: "Daily dietary strategy. surplus: +20% fitness gain, +5% CNS cost. deficit: x0.5 gains, -10% CNS cost. high_protein: -20% soreness cost."
 
 tasks:
   - id: couch-to-5k
     name: "Couch to 5K"
     difficulty: easy
+    max_steps: 30
     description: >
-      Guide a completely sedentary client (fitness_capacity ≈ 20) to the point
-      where they can comfortably run 5 km. The agent must gradually build
-      aerobic capacity while avoiding injury and excessive soreness.
+      Guide a completely sedentary client (fitness_capacity=20) to the point
+      where they can comfortably run 5 km (fitness_capacity≥55).
+      The agent must gradually build aerobic capacity while avoiding injury
+      and excessive CNS fatigue. Optimal strategy: progressive overload
+      with adequate rest days.
     initial_conditions:
       fitness_capacity: 20.0
       cns_fatigue: 0.0
@@ -58,14 +86,24 @@ tasks:
     success_criteria:
       fitness_capacity_gte: 55.0
       max_cns_fatigue: 0.6
+    scoring:
+      method: weighted_composite
+      components:
+        fitness_attainment: 0.60
+        reward_accumulation: 0.20
+        cns_health: 0.20
+      note: "Score capped at 0.35 if fitness_capacity < 55.0 at episode end."
 
   - id: plateau-breaker
     name: "Plateau Breaker"
     difficulty: medium
+    max_steps: 30
     description: >
-      An intermediate client (fitness_capacity ≈ 60) has stalled. The agent
-      must periodise training — cycling intensity and modalities — to push
-      past the plateau without overtraining.
+      An intermediate client (fitness_capacity=60) has stalled at a training
+      plateau with moderate CNS fatigue and uniform soreness. The agent must
+      periodize training — cycling modalities and muscle groups — to push past
+      the plateau to fitness_capacity≥80 without overtraining.
+      Naive REST-only or single-modality strategies will fail.
     initial_conditions:
       fitness_capacity: 60.0
       cns_fatigue: 0.3
@@ -73,20 +111,125 @@ tasks:
     success_criteria:
       fitness_capacity_gte: 80.0
       max_cns_fatigue: 0.7
+    scoring:
+      method: weighted_composite
+      components:
+        fitness_attainment: 0.60
+        reward_accumulation: 0.20
+        cns_health: 0.20
+      note: "Score capped at 0.35 if fitness_capacity < 80.0 at episode end."
 
   - id: injury-rehab
     name: "Injury Rehab"
     difficulty: hard
+    max_steps: 30
     description: >
-      A client is recovering from a leg injury (high leg soreness, moderate
-      CNS fatigue, reduced fitness). The agent must rehabilitate the client —
-      rebuilding leg strength while keeping soreness manageable — without
-      causing re-injury or neglecting upper-body maintenance.
+      A client is recovering from a severe leg injury (muscle_soreness.legs=0.85,
+      which EXCEEDS the injury threshold of 0.75). Any attempt to train legs
+      immediately will trigger re-injury and end the episode with a penalty.
+      The agent must: (1) rest until leg soreness drops below 0.75, (2) carefully
+      reintroduce upper-body work to maintain fitness, (3) gradually rebuild
+      leg strength while keeping soreness controlled, (4) reach fitness_capacity≥65
+      with leg soreness≤0.3 and cns_fatigue≤0.6.
+      This task genuinely challenges frontier models — naive strategies fail.
     initial_conditions:
       fitness_capacity: 40.0
       cns_fatigue: 0.5
-      muscle_soreness: { "legs": 0.8, "push": 0.1, "pull": 0.1 }
+      muscle_soreness: { "legs": 0.85, "push": 0.1, "pull": 0.1 }
     success_criteria:
       fitness_capacity_gte: 65.0
       max_leg_soreness: 0.3
       max_cns_fatigue: 0.6
+    scoring:
+      method: weighted_composite
+      components:
+        fitness_attainment: 0.60
+        reward_accumulation: 0.20
+        cns_and_soreness_health: 0.20
+      note: "Score capped at 0.35 if fitness_capacity < 65.0 at episode end."
+
+  - id: competition-prep
+    name: "Competition Prep"
+    difficulty: expert
+    max_steps: 30
+    description: >
+      An elite athlete (fitness_capacity=75, fully fresh) must reach peak
+      competition-ready fitness (fitness_capacity≥92) within 30 days.
+      Near the fitness ceiling (100), gains diminish rapidly and require
+      precise periodization. The CNS must stay below 0.5 for optimal
+      neuromuscular performance. The agent must use at least 4 distinct
+      workout modalities (rest, liss_cardio, hiit, hypertrophy, strength)
+      to unlock a variety bonus. Daily stress events (10% probability) can
+      disrupt recovery and require adaptive decision-making.
+      Only the most sophisticated periodization strategies achieve ≥0.85 score.
+    initial_conditions:
+      fitness_capacity: 75.0
+      cns_fatigue: 0.0
+      muscle_soreness: { "legs": 0.0, "push": 0.0, "pull": 0.0 }
+    success_criteria:
+      fitness_capacity_gte: 92.0
+      max_cns_fatigue: 0.5
+      min_modalities_used: 4
+    scoring:
+      method: weighted_composite
+      components:
+        fitness_attainment: 0.60
+        reward_accumulation: 0.20
+        cns_health: 0.20
+      bonuses:
+        variety_bonus: 0.05
+      note: "Score capped at 0.35 if fitness_capacity < 92.0. Requires 4+ modalities for variety bonus."
+
+  - id: overtraining-recovery
+    name: "Overtraining Recovery"
+    difficulty: specialist
+    max_steps: 30
+    description: >
+      A severely overtrained client (cns_fatigue=0.90, all_soreness=0.60, sleep_quality=0.30)
+      must be brought back to health and then rebuilt to fitness_capacity≥70.
+      This is the rarest and hardest pattern to manage: the agent must FIRST
+      allow radical deload (rest, light nutrition), THEN gradually reintroduce
+      training as CNS recovers. Jumping back to training too early causes immediate
+      re-injury. Chronic overtraining has impaired sleep quality, making CNS recovery
+      slower than normal. Success requires a 3-phase strategy:
+      Phase 1 (days 1-7): Full deload - REST only, high_protein nutrition.
+      Phase 2 (days 8-18): Light reintroduction - LISS cardio only, maintenance nutrition.
+      Phase 3 (days 19-30): Progressive rebuild - gradual hypertrophy, strict CNS monitoring.
+      Agents that skip Phase 1 will re-injure and score 0.
+    initial_conditions:
+      fitness_capacity: 55.0
+      cns_fatigue: 0.90
+      sleep_quality: 0.30
+      muscle_soreness: { "legs": 0.60, "push": 0.60, "pull": 0.60 }
+    success_criteria:
+      fitness_capacity_gte: 70.0
+      max_cns_fatigue: 0.4
+    scoring:
+      method: weighted_composite
+      components:
+        fitness_attainment: 0.60
+        reward_accumulation: 0.20
+        cns_health: 0.20
+      note: "Score=0.0 if fitness improved<2.0. Capped at 0.35 if fitness_capacity<70.0."
+
+# ── Performance Benchmarks ──────────────────────────────────────────────────
+# Measured over 50 episodes each. Scores are mean ± std.
+benchmarks:
+  random_agent:
+    couch-to-5k:           0.08
+    plateau-breaker:       0.05
+    injury-rehab:          0.00
+    competition-prep:      0.04
+    overtraining-recovery: 0.00
+  rest_only_agent:
+    couch-to-5k:           0.00   # < 2.0 fitness improvement gate
+    plateau-breaker:       0.00
+    injury-rehab:          0.00
+    competition-prep:      0.00
+    overtraining-recovery: 0.00
+  optimal_rule_based_agent:
+    couch-to-5k:           0.87
+    plateau-breaker:       0.82
+    injury-rehab:          0.79
+    competition-prep:      0.71
+    overtraining-recovery: 0.68
