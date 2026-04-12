@@ -20,7 +20,7 @@ tags:
 
 > An OpenEnv-compatible reinforcement learning environment that models a virtual human client's physiology — fitness capacity, CNS fatigue, and per-muscle-group soreness — enabling AI personal-trainer agents to learn optimal workout programming.
 
-🔗 **Live Space:** [syedmohsin7/GymCompanion-Env](https://huggingface.co/spaces/syedmohsin7/GymCompanion-Env)
+🔗 **Live Space:** [varun5526/GymCompanion-Env](https://huggingface.co/spaces/varun5526/GymCompanion-Env)
 
 ---
 
@@ -31,7 +31,7 @@ tags:
 | `fitness_capacity`    | `float`            | 0.0 – 100.0 | Overall cardiovascular & muscular fitness                  |
 | `cns_fatigue`         | `float`            | 0.0 – 1.0   | Central Nervous System fatigue                            |
 | `muscle_soreness`     | `Dict[str, float]` | 0.0 – 1.0   | Per-group soreness (`legs`, `push`, `pull`)               |
-| `days_active`         | `int`              | 0+           | Total training days completed in the episode              |
+| `days_active`         | `int`              | 0+           | Cumulative training days completed in the episode         |
 | `goal_progress`       | `float`            | 0.0 – 1.0   | Normalized progress toward task fitness goal              |
 | `days_since_last_rest`| `int`              | 0+           | Consecutive training days without REST (overtraining risk)|
 | `stress_event`        | `bool`             | —            | Life-stress today (10% probability, halves CNS recovery)  |
@@ -239,4 +239,3 @@ While the current engine (v1.0) is submission-ready, the system architecture sup
 ## License
 
 BSD-style license. See [LICENSE](LICENSE) for details.
-
