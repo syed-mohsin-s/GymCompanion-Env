@@ -56,8 +56,8 @@ class NutritionProtocol(str, Enum):
     Directly affects growth rate, soreness recovery, and CNS demands:
     - MAINTENANCE: no modifier (baseline)
     - SURPLUS:     +20% fitness gain, +5% CNS cost (caloric excess supports growth)
-    - DEFICIT:     ×0.5 fitness gain, −10% CNS cost (caloric restriction limits gains)
-    - HIGH_PROTEIN: −20% soreness cost (protein accelerates muscle repair)
+    - DEFICIT:     x0.5 fitness gain, -10% CNS cost (caloric restriction limits gains)
+    - HIGH_PROTEIN: -20% soreness cost (protein accelerates muscle repair)
     """
 
     MAINTENANCE  = "maintenance"
@@ -144,7 +144,7 @@ class GymcompanionObservation(Observation):
         le=1.0,
         description=(
             "Quality of last night's sleep (0.0 = terrible, 1.0 = perfect). "
-            "Scales CNS recovery on rest days. Sleep ≥ 0.9 extends the super-compensation "
+            "Scales CNS recovery on rest days. Sleep >= 0.9 extends the super-compensation "
             "window. Stress events and very hard training reduce sleep quality."
         ),
     )
@@ -154,9 +154,9 @@ class GymcompanionObservation(Observation):
         ge=0.0,
         le=1.0,
         description=(
-            "Diversity score of workout modalities used in the last 7 days (0.0–1.0). "
+            "Diversity score of workout modalities used in the last 7 days (0.0-1.0). "
             "Using all 5 modalities (rest, liss_cardio, hiit, hypertrophy, strength) gives 1.0. "
-            "A score ≥ 0.6 (3+ modalities) indicates good periodization."
+            "A score >= 0.6 (3+ modalities) indicates good periodization."
         ),
     )
 
@@ -204,8 +204,8 @@ class GymcompanionAction(Action):
     nutrition_protocol: NutritionProtocol = Field(
         default=NutritionProtocol.MAINTENANCE,
         description=(
-            "Daily nutrition strategy. SURPLUS (+20% gains), DEFICIT (×0.5 gains, faster CNS recovery), "
-            "HIGH_PROTEIN (−20% soreness cost), or MAINTENANCE (no modifier). "
+            "Daily nutrition strategy. SURPLUS (+20% gains), DEFICIT (x0.5 gains, faster CNS recovery), "
+            "HIGH_PROTEIN (-20% soreness cost), or MAINTENANCE (no modifier). "
             "Choose wisely: surplus during injury-risk phases increases CNS overhead."
         ),
     )

@@ -93,7 +93,7 @@ def get_env_url(max_retries=15, delay=2):
 # ==========================================
 SYSTEM_PROMPTS = {
     "couch-to-5k": (
-        "You are an AI Personal Trainer. Your client is SEDENTARY (fitness=20) and you must build them to fitness≥55. "
+        "You are an AI Personal Trainer. Your client is SEDENTARY (fitness=20) and you must build them to fitness>=55. "
         "You receive JSON with fitness_capacity, cns_fatigue, muscle_soreness (legs/push/pull), days_active, goal_progress, and stress_event. "
         "Strategy: Start with LISS cardio at low RPE (4-5), gradually introduce hypertrophy at RPE 6-7. "
         "Always REST when cns_fatigue > 0.6, soreness > 0.6, or stress_event=true with cns > 0.4. "
@@ -102,11 +102,11 @@ SYSTEM_PROMPTS = {
         "'target_muscle' (none/legs/push/pull/full_body), 'intensity_rpe' (1-10). No other text."
     ),
     "plateau-breaker": (
-        "You are an AI Personal Trainer. Your client is PLATEAUED (fitness=60) and you must push them to fitness≥80. "
+        "You are an AI Personal Trainer. Your client is PLATEAUED (fitness=60) and you must push them to fitness>=80. "
         "You receive JSON with fitness_capacity, cns_fatigue, muscle_soreness, goal_progress, and stress_event. "
         "Strategy: First REST if cns_fatigue > 0.5 or stress_event=true. "
-        "Periodize: rotate strength (RPE 8) → hypertrophy (RPE 7) → HIIT to break adaptation. "
-        "Rotate muscle groups (legs → push → pull) for periodization bonuses. Growth zone is RPE 6-8. "
+        "Periodize: rotate strength (RPE 8) -> hypertrophy (RPE 7) -> HIIT to break adaptation. "
+        "Rotate muscle groups (legs -> push -> pull) for periodization bonuses. Growth zone is RPE 6-8. "
         "Output ONLY valid JSON: 'workout_category' (rest/liss_cardio/hiit/hypertrophy/strength), "
         "'target_muscle' (none/legs/push/pull/full_body), 'intensity_rpe' (1-10). No other text."
     ),
@@ -115,19 +115,19 @@ SYSTEM_PROMPTS = {
         "CRITICAL: Training legs when soreness > 0.75 causes re-injury and IMMEDIATELY ends the episode. "
         "You receive JSON with fitness_capacity, cns_fatigue, muscle_soreness, goal_progress, and stress_event. "
         "Mandatory phases: "
-        "Phase 1 (days 1-3): REST only — legs soreness must drop below 0.75. "
+        "Phase 1 (days 1-3): REST only - legs soreness must drop below 0.75. "
         "Phase 2 (days 4-10): Upper body only (push/pull hypertrophy, RPE 6-7), keep resting legs. "
         "Phase 3 (days 11+): Legs ONLY when soreness < 0.4, starting at RPE 5-6. "
         "If stress_event=true: REST regardless of phase (safety first). "
-        "Target: fitness≥65, legs_soreness≤0.3, cns≤0.6. "
+        "Target: fitness>=65, legs_soreness<=0.3, cns<=0.6. "
         "Output ONLY valid JSON: 'workout_category' (rest/liss_cardio/hiit/hypertrophy/strength), "
         "'target_muscle' (none/legs/push/pull/full_body), 'intensity_rpe' (1-10). No other text."
     ),
     "competition-prep": (
-        "You are an elite AI Strength & Conditioning Coach preparing an athlete (fitness=75) for competition (target: fitness≥92). "
+        "You are an elite AI Strength & Conditioning Coach preparing an athlete (fitness=75) for competition (target: fitness>=92). "
         "You receive JSON with fitness_capacity, cns_fatigue, muscle_soreness, sleep_quality, weekly_variety_score, and stress_event. "
         "CRITICAL RULES: "
-        "1. CNS must stay below 0.5 — elite performance requires fresh nervous system. "
+        "1. CNS must stay below 0.5 - elite performance requires fresh nervous system. "
         "2. Must use at least 4 different workout modalities total to earn variety bonus. "
         "3. If stress_event=true: reduce RPE by 1-2 or REST. "
         "4. Near fitness ceiling (>85), gains are small — prioritize consistency. "
@@ -143,8 +143,8 @@ SYSTEM_PROMPTS = {
         "Phase 1 (days 1-7): REST ONLY, nutrition_protocol=high_protein. client WILL re-injure if trained now. "
         "Phase 2 (days 8-18): LISS cardio only (RPE 3-4), nutrition_protocol=maintenance. Train only when cns<0.5 AND all soreness<0.4. "
         "Phase 3 (days 19-30): Gradually introduce hypertrophy (RPE 6-7). Use surplus nutrition for gains. "
-        "ALWAYS check sleep_quality — if <0.5, the client needs REST regardless of phase. "
-        "Target: fitness≥70, cns≤0.4. Skip Phase 1 = automatic failure (re-injury). "
+        "ALWAYS check sleep_quality - if <0.5, the client needs REST regardless of phase. "
+        "Target: fitness>=70, cns<=0.4. Skip Phase 1 = automatic failure (re-injury). "
         "Output ONLY valid JSON: 'workout_category', 'target_muscle', 'intensity_rpe' (1-10), 'nutrition_protocol'. No other text."
     ),
 }

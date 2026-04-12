@@ -5,14 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-GymCompanion Environment — orchestration layer over PhysiologyEngine.
+GymCompanion Environment - orchestration layer over PhysiologyEngine.
 
 5 tasks (easy → medium → hard → expert → specialist):
-  couch-to-5k          fitness 20 → 55   (easy, fresh client)
-  plateau-breaker      fitness 60 → 80   (medium, stalled athlete)
-  injury-rehab         fitness 40 → 65   (hard, severe leg injury)
-  competition-prep     fitness 75 → 92   (expert, strict CNS ceiling)
-  overtraining-recovery fitness 55 → 70  (specialist, massively overtrained client)
+  couch-to-5k          fitness 20 -> 55   (easy, fresh client)
+  plateau-breaker      fitness 60 -> 80   (medium, stalled athlete)
+  injury-rehab         fitness 40 -> 65   (hard, severe leg injury)
+  competition-prep     fitness 75 -> 92   (expert, strict CNS ceiling)
+  overtraining-recovery fitness 55 -> 70  (specialist, massively overtrained client)
 
 Scoring rules:
   - Score = 0.0 if fitness improved by < 2.0 (no effort detected)
@@ -133,7 +133,7 @@ class GymcompanionEnvironment(Environment):
         self._stress_event_active: bool = False
         self._modalities_used: set = set()
 
-    # ── reset ────────────────────────────────────────────────────────────
+    # -- reset ------------------------------------------------------------
 
     def reset(self, *args, **kwargs) -> GymcompanionObservation:
         self._state = State(episode_id=str(uuid4()), step_count=0)
@@ -163,7 +163,7 @@ class GymcompanionEnvironment(Environment):
 
         return self._build_observation(reward=0.0, done=False)
 
-    # ── step ─────────────────────────────────────────────────────────────
+    # -- step -------------------------------------------------------------
 
     def step(self, action: GymcompanionAction) -> GymcompanionObservation:  # type: ignore[override]
         if self._done:
@@ -194,17 +194,17 @@ class GymcompanionEnvironment(Environment):
 
         return self._build_observation(reward=result.reward, done=done)
 
-    # ── scoring ──────────────────────────────────────────────────────────
+    # -- scoring ----------------------------------------------------------
 
     def _compute_score(self) -> float:
         """
         Normalized score in [0.0, 1.0] strictly aligned with success_criteria.
 
         Gates:
-        1. No meaningful effort (fitness improved < 2.0) → 0.0
-        2. Goal not met → score capped at 0.35
-        3. CNS violations → penalty
-        4. Leg soreness violations (injury-rehab) → penalty
+        1. No meaningful effort (fitness improved < 2.0) -> 0.0
+        2. Goal not met -> score capped at 0.35
+        3. CNS violations -> penalty
+        4. Leg soreness violations (injury-rehab) -> penalty
         5. competition-prep variety bonus: 4+ modalities used
         """
         cfg = self._task_config
@@ -213,26 +213,26 @@ class GymcompanionEnvironment(Environment):
         start_fitness = cfg["fitness_capacity"]
         max_cns = cfg.get("max_cns", 0.7)
 
-        # ── Gate 1: No effort ──────────────────────────────────────────
+        # -- Gate 1: No effort ------------------------------------------
         fitness_improvement = p.fitness_capacity - start_fitness
         if fitness_improvement < 2.0:
             return 0.0
 
-        # ── Fitness attainment ─────────────────────────────────────────
+        # -- Fitness attainment -----------------------------------------
         fitness_gap = max(1.0, goal_fitness - start_fitness)
         fitness_score = min(1.0, fitness_improvement / fitness_gap)
 
-        # ── Gate 2: Fitness goal gate ──────────────────────────────────
+        # -- Gate 2: Fitness goal gate ----------------------------------
         goal_met = p.fitness_capacity >= goal_fitness
         if not goal_met:
             fitness_score = min(fitness_score, 0.35)
 
-        # ── CNS penalty ────────────────────────────────────────────────
+        # -- CNS penalty ------------------------------------------------
         cns_penalty = 0.0
         if p.cns_fatigue > max_cns:
             cns_penalty = min(0.3, (p.cns_fatigue - max_cns) / (1.0 - max_cns) * 0.3)
 
-        # ── Injury-rehab leg soreness penalty ─────────────────────────
+        # -- Injury-rehab leg soreness penalty -------------------------
         leg_penalty = 0.0
         if "max_leg_soreness" in cfg:
             max_leg = cfg["max_leg_soreness"]
@@ -240,12 +240,12 @@ class GymcompanionEnvironment(Environment):
             if leg_sor > max_leg:
                 leg_penalty = min(0.4, (leg_sor - max_leg) / 0.7 * 0.4)
 
-        # ── Competition-prep variety bonus ─────────────────────────────
+        # -- Competition-prep variety bonus -----------------------------
         variety_bonus = 0.0
         if self._task_name == "competition-prep" and len(self._modalities_used) >= 4:
             variety_bonus = 0.05
 
-        # ── Reward component ───────────────────────────────────────────
+        # -- Reward component -------------------------------------------
         reward_score = min(1.0, max(0.0, self._cumulative_reward / cfg["target_max_reward"]))
 
         raw = (
@@ -260,7 +260,7 @@ class GymcompanionEnvironment(Environment):
             raw = min(raw, 0.35)
         return round(max(0.0, min(1.0, raw)), 4)
 
-    # ── observation builder ───────────────────────────────────────────────
+    # -- observation builder ----------------------------------------------
 
     def _build_observation(self, *, reward: float, done: bool) -> GymcompanionObservation:
         p = self._physiology

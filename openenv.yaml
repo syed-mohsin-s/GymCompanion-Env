@@ -7,8 +7,8 @@ port: 7860
 
 description: >
   Physiological Simulator for Health-Tech AI Agents.
-  Models a virtual human client's physiology — fitness capacity, CNS fatigue,
-  and per-muscle-group soreness — so an AI personal-trainer agent can learn
+  Models a virtual human client's physiology - fitness capacity, CNS fatigue,
+  and per-muscle-group soreness - so an AI personal-trainer agent can learn
   optimal workout programming through reinforcement learning.
   Features: HIIT/LISS differentiation, periodization bonuses, detraining,
   CNS super-compensation, and progressive soreness amplification.
@@ -127,12 +127,12 @@ tasks:
     description: >
       A client is recovering from a severe leg injury (muscle_soreness.legs=0.85,
       which EXCEEDS the injury threshold of 0.75). Any attempt to train legs
-      immediately will trigger re-injury and end the episode with a penalty.
+      immediately will trigger re-injury and end the- must rehab without re-injury.
       The agent must: (1) rest until leg soreness drops below 0.75, (2) carefully
       reintroduce upper-body work to maintain fitness, (3) gradually rebuild
-      leg strength while keeping soreness controlled, (4) reach fitness_capacity≥65
-      with leg soreness≤0.3 and cns_fatigue≤0.6.
-      This task genuinely challenges frontier models — naive strategies fail.
+      leg strength while keeping soreness controlled, (4) reach fitness_capacity>=65
+      with leg soreness<=0.3 and cns_fatigue<=0.6.
+      This task genuinely challenges frontier models - naive strategies fail.
     initial_conditions:
       fitness_capacity: 40.0
       cns_fatigue: 0.5
@@ -163,7 +163,7 @@ tasks:
       workout modalities (rest, liss_cardio, hiit, hypertrophy, strength)
       to unlock a variety bonus. Daily stress events (10% probability) can
       disrupt recovery and require adaptive decision-making.
-      Only the most sophisticated periodization strategies achieve ≥0.85 score.
+      Only the most sophisticated periodization strategies achieve >=0.85 score.
     initial_conditions:
       fitness_capacity: 75.0
       cns_fatigue: 0.0

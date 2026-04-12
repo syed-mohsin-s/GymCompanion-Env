@@ -5,23 +5,23 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Physiology Engine — pure-Python state-transition math for GymCompanion-Env.
+Physiology Engine - pure-Python state-transition math for GymCompanion-Env.
 
 Framework-free: no Pydantic, no OpenEnv. Pure dataclasses + floats.
 
 Physics features:
-  REST         — CNS recovery scaled by sleep_quality; smart-rest bonus when CNS ≥ 0.6
-  Sleep        — quality set each night (0.0–1.0); stress & hard RPE impair it
-  Nutrition    — surplus: +20% growth | deficit: ×0.5 growth | high_protein: −20% soreness
-  Growth       — RPE 6–8; super-comp at full CNS recovery (1.5×, extended by good sleep)
-  HIIT         — high CNS cost (0.20), moderate fitness gain
-  LISS         — low CNS cost (0.03), small fitness gain
-  Detraining   — 3+ consecutive rest days → slight fitness decay
-  Periodization— rotating muscle groups earns +0.15 reward bonus
-  Adaptive DOMS— same muscle 3+ days cascades soreness ×4
-  Weekly bonus — 7-day window with ≥2 rest, ≥2 strength/hypertrophy, ≥1 cardio → +0.30
-  Injury       — RPE > 8 + CNS > 0.70 OR soreness > 0.75; stress adds +0.05 CNS overhead
-  Continuous   — partial fitness gains produce partial rewards
+  REST         - CNS recovery scaled by sleep_quality; smart-rest bonus when CNS >= 0.6
+  Sleep        - quality set each night (0.0-1.0); stress & hard RPE impair it
+  Nutrition    - surplus: +20% growth | deficit: x0.5 growth | high_protein: -20% soreness
+  Growth       - RPE 6-8; super-comp at full CNS recovery (1.5x, extended by good sleep)
+  HIIT         - high CNS cost (0.20), moderate fitness gain
+  LISS         - low CNS cost (0.03), small fitness gain
+  Detraining   - 3+ consecutive rest days -> slight fitness decay
+  Periodization- rotating muscle groups earns +0.15 reward bonus
+  Adaptive DOMS- same muscle 3+ days cascades soreness x4
+  Weekly bonus - 7-day window with >=2 rest, >=2 strength/hypertrophy, >=1 cardio -> +0.30
+  Injury       - RPE > 8 + CNS > 0.70 OR soreness > 0.75; stress adds +0.05 CNS overhead
+  Continuous   - partial fitness gains produce partial rewards
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# -- Constants ----------------------------------------------------------------
 
 FITNESS_MIN, FITNESS_MAX = 0.0, 100.0
 FATIGUE_MIN, FATIGUE_MAX = 0.0, 1.0
@@ -111,7 +111,7 @@ _NUTRITION_CNS_MULT = {
 }
 
 
-# ── Data containers ──────────────────────────────────────────────────────────
+# -- Data containers ----------------------------------------------------------
 
 @dataclass
 class PhysiologyState:
@@ -125,7 +125,7 @@ class PhysiologyState:
     days_active: int = 0
 
     # Sleep tracking
-    sleep_quality: float = 0.8   # last night's sleep quality (0.0–1.0)
+    sleep_quality: float = 0.8   # last night's sleep quality (0.0-1.0)
 
     # Internal tracking (not directly exposed)
     consecutive_rest_days: int = 0
@@ -148,14 +148,14 @@ class TransitionResult:
     injured: bool
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# -- Helpers ------------------------------------------------------------------
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return round(max(lo, min(hi, value)), 4)
 
 
 def compute_weekly_variety_score(week_history: List[str]) -> float:
-    """0.0–1.0 score of how many distinct modalities used in last 7 days."""
+    """0.0-1.0 score of how many distinct modalities used in last 7 days."""
     if not week_history:
         return 0.0
     unique = len(set(week_history))
@@ -186,11 +186,11 @@ def _next_sleep_quality(
     if stress_event:
         base -= 0.3     # stress strongly impairs sleep
     if intensity_rpe >= 9:
-        base -= 0.10    # very hard training → disrupted sleep
+        base -= 0.10    # very hard training -> disrupted sleep
     elif intensity_rpe >= 7:
-        base -= 0.05    # moderate training → slight impairment
+        base -= 0.05    # moderate training -> slight impairment
     if workout_category == "rest":
-        base += 0.10    # good rest day → better recovery sleep
+        base += 0.10    # good rest day -> better recovery sleep
     # Momentum: very poor or very good sleep tends to persist slightly
     base = 0.7 * base + 0.3 * current_sleep
     return _clamp(base, 0.1, 1.0)
@@ -206,14 +206,14 @@ class PhysiologyEngine:
 
     Business rules (summary)
     -------------------------
-    REST: CNS recovery = base × sleep_quality × (0.5 if stress else 1.0)
-    Sleep: computed nightly; stress/hard RPE → lower; rest days → higher
-    Nutrition: surplus +20% fitness, deficit ×0.5, high_protein −20% soreness
-    Growth (RPE 6–8): super-comp window extended to cns≤0.10 if sleep_quality ≥ 0.9
-    Weekly bonus: ≥2 rest + ≥2 strength/hypertrophy + ≥1 cardio in last 7 days → +0.30
-    Detraining: 3+ consecutive rest → fitness −0.15/day
-    Periodization: different muscle than last → +0.15 reward
-    Adaptive DOMS: same muscle 3+ days → ×4 soreness cost
+    REST: CNS recovery = base x sleep_quality x (0.5 if stress else 1.0)
+    Sleep: computed nightly; stress/hard RPE -> lower; rest days -> higher
+    Nutrition: surplus +20% fitness, deficit x0.5, high_protein -20% soreness
+    Growth (RPE 6-8): super-comp window extended to cns<=0.10 if sleep_quality >= 0.9
+    Weekly bonus: >=2 rest + >=2 strength/hypertrophy + >=1 cardio in last 7 days -> +0.30
+    Detraining: 3+ consecutive rest -> fitness -0.15/day
+    Periodization: different muscle than last -> +0.15 reward
+    Adaptive DOMS: same muscle 3+ days -> x4 soreness cost
     Injury: RPE>8+CNS>0.70 OR soreness>0.75; stress event adds 0.05 CNS
     """
 
@@ -234,7 +234,7 @@ class PhysiologyEngine:
         state               : Current physiology snapshot.
         workout_category    : rest | liss_cardio | hiit | hypertrophy | strength
         target_muscle       : none | legs | push | pull | full_body
-        intensity_rpe       : 1–10 (Rate of Perceived Exertion)
+        intensity_rpe       : 1-10 (Rate of Perceived Exertion)
         stress_event        : Life-stress today (bad sleep, work pressure)
         nutrition_protocol  : maintenance | surplus | deficit | high_protein
         """
@@ -266,9 +266,9 @@ class PhysiologyEngine:
 
         reward = 0.0
 
-        # ── RULE 1: REST ──────────────────────────────────────────────────
+        # -- RULE 1: REST --------------------------------------------------
         if workout_category == "rest":
-            # CNS recovery: sleep quality × stress modifier
+            # CNS recovery: sleep quality x stress modifier
             cns_recovery = REST_CNS_RECOVERY * sleep * (0.5 if stress_event else 1.0)
             cns = _clamp(cns - cns_recovery, FATIGUE_MIN, FATIGUE_MAX)
             for key in soreness:
@@ -306,7 +306,7 @@ class PhysiologyEngine:
             )
             return TransitionResult(next_state=next_state, reward=reward, injured=False)
 
-        # ── RULE 2: Injury check ──────────────────────────────────────────
+        # -- RULE 2: Injury check ------------------------------------------
         # Stress event adds CNS overhead before checking injury threshold
         if stress_event:
             cns = _clamp(cns + 0.05, FATIGUE_MIN, FATIGUE_MAX)
@@ -336,13 +336,13 @@ class PhysiologyEngine:
         consecutive_rest = 0
         training_streak += 1
 
-        # ── Periodization bonus ───────────────────────────────────────────
+        # -- Periodization bonus -------------------------------------------
         muscle_key = target_muscle if target_muscle != "none" else None
         periodization_bonus = 0.0
         if muscle_key and last_muscle and muscle_key != last_muscle:
             periodization_bonus = PERIODIZATION_BONUS
 
-        # ── Adaptive DOMS: same muscle 3+ days ───────────────────────────
+        # -- Adaptive DOMS: same muscle 3+ days ---------------------------
         if muscle_key and muscle_key == last_muscle:
             consec_same += 1
         else:
@@ -356,16 +356,16 @@ class PhysiologyEngine:
             if len(muscle_history) > 3:
                 muscle_history = muscle_history[-3:]
 
-        # ── Nutrition multipliers ─────────────────────────────────────────
+        # -- Nutrition multipliers -----------------------------------------
         nut_fit   = _NUTRITION_FITNESS_MULT.get(nutrition_protocol, 1.0)
         nut_sor   = _NUTRITION_SORENESS_MULT.get(nutrition_protocol, 1.0)
         nut_cns   = _NUTRITION_CNS_MULT.get(nutrition_protocol, 1.0)
 
-        # ── Super-compensation window (extended by good sleep) ────────────
+        # -- Super-compensation window (extended by good sleep) ------------
         supercomp_threshold = SUPERCOMP_CNS_GREAT_SLEEP if sleep >= 0.9 else SUPERCOMP_CNS_NORMAL
         supercomp = SUPERCOMP_FITNESS_MULTIPLIER if cns <= supercomp_threshold else 1.0
 
-        # ── RULE 3: HIIT ──────────────────────────────────────────────────
+        # -- RULE 3: HIIT --------------------------------------------------
         if workout_category == "hiit":
             cns = _clamp(cns + HIIT_CNS_COST * nut_cns, FATIGUE_MIN, FATIGUE_MAX)
             fitness_gain = HIIT_FITNESS_GAIN * nut_fit * (1 - cns * 0.5)
@@ -379,7 +379,7 @@ class PhysiologyEngine:
             reward = 0.3 + (gain / 2.0) + periodization_bonus
             days_active += 1
 
-        # ── RULE 4: LISS Cardio ───────────────────────────────────────────
+        # -- RULE 4: LISS Cardio -------------------------------------------
         elif workout_category == "liss_cardio":
             cns = _clamp(cns + LISS_CNS_COST * nut_cns, FATIGUE_MIN, FATIGUE_MAX)
             fitness = _clamp(fitness + LISS_FITNESS_GAIN * nut_fit, FITNESS_MIN, FITNESS_MAX)
@@ -391,7 +391,7 @@ class PhysiologyEngine:
             reward = 0.15 + periodization_bonus
             days_active += 1
 
-        # ── RULE 5: Growth (RPE 6–8) ──────────────────────────────────────
+        # -- RULE 5: Growth (RPE 6-8) --------------------------------------
         elif GROWTH_RPE_LOW <= intensity_rpe <= GROWTH_RPE_HIGH:
             fitness_gain = BASE_GROWTH_FITNESS_GAIN * supercomp * nut_fit
             fitness = _clamp(fitness + fitness_gain, FITNESS_MIN, FITNESS_MAX)
@@ -405,7 +405,7 @@ class PhysiologyEngine:
             reward = REWARD_GROWTH_BASE * (gain / BASE_GROWTH_FITNESS_GAIN) + periodization_bonus
             days_active += 1
 
-        # ── RULE 6: Fallback (sub-optimal RPE, no injury) ─────────────────
+        # -- RULE 6: Fallback (sub-optimal RPE, no injury) -----------------
         else:
             scale = intensity_rpe / 10.0
             cns = _clamp(cns + 0.05 * scale, FATIGUE_MIN, FATIGUE_MAX)
