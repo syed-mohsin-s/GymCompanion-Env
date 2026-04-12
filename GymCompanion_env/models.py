@@ -110,7 +110,7 @@ class GymcompanionObservation(Observation):
     days_active: int = Field(
         default=0,
         ge=0,
-        description="Number of consecutive days the client has been active in the program.",
+        description="Total number of non-rest training days the client has completed in the episode.",
     )
 
     goal_progress: float = Field(

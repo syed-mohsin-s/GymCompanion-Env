@@ -129,6 +129,10 @@ class PhysiologyState:
 
     # Internal tracking (not directly exposed)
     consecutive_rest_days: int = 0
+    # training_streak: consecutive training days since the last REST day.
+    # Resets to 0 on REST; increments on every training day.
+    # This is the correct basis for days_since_last_rest in observations.
+    training_streak: int = 0
     last_muscle_trained: Optional[str] = None
     consecutive_same_muscle: int = 0
     muscle_session_history: List[str] = field(default_factory=list)  # last 3 muscles
@@ -243,6 +247,7 @@ class PhysiologyEngine:
         soreness = dict(state.muscle_soreness)
         days_active = state.days_active
         consecutive_rest = state.consecutive_rest_days
+        training_streak = state.training_streak
         last_muscle = state.last_muscle_trained
         consec_same = state.consecutive_same_muscle
         muscle_history = list(state.muscle_session_history)
@@ -271,6 +276,7 @@ class PhysiologyEngine:
                     soreness[key] - REST_SORENESS_RECOVERY, SORENESS_MIN, SORENESS_MAX
                 )
             consecutive_rest += 1
+            training_streak = 0  # reset training streak on REST
             reward = REWARD_REST
 
             # Smart rest bonus: rewarded when resting is the correct call (high CNS)
@@ -292,6 +298,7 @@ class PhysiologyEngine:
                 days_active=days_active,
                 sleep_quality=next_sleep,
                 consecutive_rest_days=consecutive_rest,
+                training_streak=training_streak,
                 last_muscle_trained=last_muscle,
                 consecutive_same_muscle=consec_same,
                 muscle_session_history=muscle_history,
@@ -317,6 +324,7 @@ class PhysiologyEngine:
                 days_active=days_active,
                 sleep_quality=next_sleep,
                 consecutive_rest_days=0,
+                training_streak=0,
                 last_muscle_trained=last_muscle,
                 consecutive_same_muscle=0,
                 muscle_session_history=muscle_history,
@@ -324,8 +332,9 @@ class PhysiologyEngine:
             )
             return TransitionResult(next_state=next_state, reward=REWARD_INJURY, injured=True)
 
-        # Reset consecutive rest counter
+        # Reset consecutive rest counter; increment training streak
         consecutive_rest = 0
+        training_streak += 1
 
         # ── Periodization bonus ───────────────────────────────────────────
         muscle_key = target_muscle if target_muscle != "none" else None
@@ -419,6 +428,7 @@ class PhysiologyEngine:
             days_active=days_active,
             sleep_quality=next_sleep,
             consecutive_rest_days=consecutive_rest,
+            training_streak=training_streak,
             last_muscle_trained=muscle_key if muscle_key else last_muscle,
             consecutive_same_muscle=consec_same,
             muscle_session_history=muscle_history,

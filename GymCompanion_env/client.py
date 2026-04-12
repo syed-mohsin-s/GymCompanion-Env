@@ -132,6 +132,7 @@ class GymcompanionEnv(
             "workout_category": action.workout_category.value,
             "target_muscle": action.target_muscle.value,
             "intensity_rpe": action.intensity_rpe,
+            "nutrition_protocol": action.nutrition_protocol.value,
         }
 
     def _parse_result(self, payload: Dict) -> StepResult[GymcompanionObservation]:
