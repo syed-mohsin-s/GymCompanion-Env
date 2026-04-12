@@ -7,52 +7,82 @@
 """
 Physiology Engine — pure-Python state-transition math for GymCompanion-Env.
 
-This module is intentionally **framework-free**: no Pydantic, no OpenEnv, no
-FastAPI.  It receives plain Python values (floats, dicts, strings/enums) and
-returns plain Python values so it can be unit-tested in isolation.
+Framework-free: no Pydantic, no OpenEnv. Pure dataclasses + floats.
+
+Physics features:
+  REST         — CNS recovery scaled by sleep_quality; smart-rest bonus when CNS ≥ 0.6
+  Sleep        — quality set each night (0.0–1.0); stress & hard RPE impair it
+  Nutrition    — surplus: +20% growth | deficit: ×0.5 growth | high_protein: −20% soreness
+  Growth       — RPE 6–8; super-comp at full CNS recovery (1.5×, extended by good sleep)
+  HIIT         — high CNS cost (0.20), moderate fitness gain
+  LISS         — low CNS cost (0.03), small fitness gain
+  Detraining   — 3+ consecutive rest days → slight fitness decay
+  Periodization— rotating muscle groups earns +0.15 reward bonus
+  Adaptive DOMS— same muscle 3+ days cascades soreness ×4
+  Weekly bonus — 7-day window with ≥2 rest, ≥2 strength/hypertrophy, ≥1 cardio → +0.30
+  Injury       — RPE > 8 + CNS > 0.70 OR soreness > 0.75; stress adds +0.05 CNS overhead
+  Continuous   — partial fitness gains produce partial rewards
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict, List, Optional
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-# Bounds (mirrored from Pydantic model constraints)
-FITNESS_MIN: float = 0.0
-FITNESS_MAX: float = 100.0
-FATIGUE_MIN: float = 0.0
-FATIGUE_MAX: float = 1.0
-SORENESS_MIN: float = 0.0
-SORENESS_MAX: float = 1.0
+FITNESS_MIN, FITNESS_MAX = 0.0, 100.0
+FATIGUE_MIN, FATIGUE_MAX = 0.0, 1.0
+SORENESS_MIN, SORENESS_MAX = 0.0, 1.0
 
 VALID_MUSCLE_KEYS = frozenset({"legs", "push", "pull"})
 
-# Recovery deltas applied on REST
+# Recovery
 REST_CNS_RECOVERY: float = 0.3
 REST_SORENESS_RECOVERY: float = 0.4
 
 # Injury thresholds
 INJURY_RPE_THRESHOLD: int = 8
 INJURY_CNS_THRESHOLD: float = 0.7
-INJURY_SORENESS_THRESHOLD: float = 0.8
+INJURY_SORENESS_THRESHOLD: float = 0.75
 
-# Growth (productive training) constants
+# Growth zone
 GROWTH_RPE_LOW: int = 6
 GROWTH_RPE_HIGH: int = 8
-GROWTH_FITNESS_GAIN: float = 0.5
+BASE_GROWTH_FITNESS_GAIN: float = 0.5
 GROWTH_CNS_COST: float = 0.1
 GROWTH_SORENESS_COST: float = 0.2
 
+# Detraining
+DETRAINING_REST_THRESHOLD: int = 3
+DETRAINING_DECAY: float = 0.15
+
+# Super-compensation CNS thresholds
+SUPERCOMP_CNS_NORMAL: float = 0.05     # standard window
+SUPERCOMP_CNS_GREAT_SLEEP: float = 0.10  # extended when sleep_quality >= 0.9
+SUPERCOMP_FITNESS_MULTIPLIER: float = 1.5
+
+# Periodization & weekly
+PERIODIZATION_BONUS: float = 0.15
+WEEKLY_PERIODIZATION_BONUS: float = 0.30
+
 # Rewards
 REWARD_REST: float = 0.1
-REWARD_INJURY: float = -1.0
-REWARD_GROWTH: float = 0.5
-REWARD_NEUTRAL: float = 0.0
+REWARD_INJURY: float = -2.0
+REWARD_GROWTH_BASE: float = 0.5
 
-# Muscle-group mapping for target_muscle → soreness keys
-_MUSCLE_KEY_MAP: Dict[str, list[str]] = {
+# HIIT
+HIIT_CNS_COST: float = 0.20
+HIIT_FITNESS_GAIN: float = 0.35
+HIIT_SORENESS_COST: float = 0.15
+
+# LISS
+LISS_CNS_COST: float = 0.03
+LISS_FITNESS_GAIN: float = 0.20
+LISS_SORENESS_COST: float = 0.05
+
+# Muscle-group mapping
+_MUSCLE_KEY_MAP: Dict[str, list] = {
     "none": [],
     "legs": ["legs"],
     "push": ["push"],
@@ -60,9 +90,28 @@ _MUSCLE_KEY_MAP: Dict[str, list[str]] = {
     "full_body": ["legs", "push", "pull"],
 }
 
+# Nutrition multipliers
+_NUTRITION_FITNESS_MULT = {
+    "maintenance": 1.00,
+    "surplus":     1.20,
+    "deficit":     0.50,
+    "high_protein":1.00,
+}
+_NUTRITION_SORENESS_MULT = {
+    "maintenance": 1.00,
+    "surplus":     1.00,
+    "deficit":     1.00,
+    "high_protein":0.80,  # easier soreness recovery
+}
+_NUTRITION_CNS_MULT = {
+    "maintenance": 1.00,
+    "surplus":     1.05,  # slight metabolic overhead
+    "deficit":     0.90,  # less demand, faster CNS recovery
+    "high_protein":1.00,
+}
+
 
 # ── Data containers ──────────────────────────────────────────────────────────
-
 
 @dataclass
 class PhysiologyState:
@@ -75,6 +124,20 @@ class PhysiologyState:
     )
     days_active: int = 0
 
+    # Sleep tracking
+    sleep_quality: float = 0.8   # last night's sleep quality (0.0–1.0)
+
+    # Internal tracking (not directly exposed)
+    consecutive_rest_days: int = 0
+    # training_streak: consecutive training days since the last REST day.
+    # Resets to 0 on REST; increments on every training day.
+    # This is the correct basis for days_since_last_rest in observations.
+    training_streak: int = 0
+    last_muscle_trained: Optional[str] = None
+    consecutive_same_muscle: int = 0
+    muscle_session_history: List[str] = field(default_factory=list)  # last 3 muscles
+    week_history: List[str] = field(default_factory=list)  # last 7 workout categories
+
 
 @dataclass
 class TransitionResult:
@@ -82,39 +145,77 @@ class TransitionResult:
 
     next_state: PhysiologyState
     reward: float
-    injured: bool  # True → episode should end immediately
+    injured: bool
 
 
-# ── Clamp helper ─────────────────────────────────────────────────────────────
-
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _clamp(value: float, lo: float, hi: float) -> float:
-    """Clamp *value* to [lo, hi] and round to 4 dp to eliminate fp noise."""
     return round(max(lo, min(hi, value)), 4)
 
 
-# ── Engine ───────────────────────────────────────────────────────────────────
+def compute_weekly_variety_score(week_history: List[str]) -> float:
+    """0.0–1.0 score of how many distinct modalities used in last 7 days."""
+    if not week_history:
+        return 0.0
+    unique = len(set(week_history))
+    return round(min(1.0, unique / 5.0), 3)
 
+
+def _weekly_periodization_bonus(week_hist: List[str]) -> float:
+    """Return +0.30 bonus reward if the last 7 days follow evidence-based structure."""
+    if len(week_hist) < 7:
+        return 0.0
+    has_rest = week_hist.count("rest") >= 2
+    strength_days = sum(1 for c in week_hist if c in ("hypertrophy", "strength"))
+    has_strength = strength_days >= 2
+    has_cardio = any(c in ("hiit", "liss_cardio") for c in week_hist)
+    if has_rest and has_strength and has_cardio:
+        return WEEKLY_PERIODIZATION_BONUS
+    return 0.0
+
+
+def _next_sleep_quality(
+    workout_category: str,
+    intensity_rpe: int,
+    stress_event: bool,
+    current_sleep: float,
+) -> float:
+    """Compute tonight's sleep quality based on today's activity."""
+    base = 0.8
+    if stress_event:
+        base -= 0.3     # stress strongly impairs sleep
+    if intensity_rpe >= 9:
+        base -= 0.10    # very hard training → disrupted sleep
+    elif intensity_rpe >= 7:
+        base -= 0.05    # moderate training → slight impairment
+    if workout_category == "rest":
+        base += 0.10    # good rest day → better recovery sleep
+    # Momentum: very poor or very good sleep tends to persist slightly
+    base = 0.7 * base + 0.3 * current_sleep
+    return _clamp(base, 0.1, 1.0)
+
+
+# ── Engine ───────────────────────────────────────────────────────────────────
 
 class PhysiologyEngine:
     """
     Stateless calculator for physiological state transitions.
 
-    All methods are pure functions — the engine holds **no mutable state**.
-    Call :meth:`transition` with the current state and an action to obtain
-    the next state, the step reward, and an injury flag.
+    All methods are pure functions — no mutable engine state.
 
-    Business rules
-    --------------
-    1. **REST** → CNS fatigue −0.3, all soreness −0.4, reward +0.1.
-    2. **Injury** → RPE > 8 with CNS > 0.7, OR training a muscle with
-       soreness > 0.8 → reward −1.0, ``injured = True``.
-    3. **Growth** → RPE 6–8 on a rested muscle → fitness +0.5,
-       CNS fatigue + cost, local soreness + cost, reward +0.5.
-    4. All values clamped to Pydantic-model bounds.
+    Business rules (summary)
+    -------------------------
+    REST: CNS recovery = base × sleep_quality × (0.5 if stress else 1.0)
+    Sleep: computed nightly; stress/hard RPE → lower; rest days → higher
+    Nutrition: surplus +20% fitness, deficit ×0.5, high_protein −20% soreness
+    Growth (RPE 6–8): super-comp window extended to cns≤0.10 if sleep_quality ≥ 0.9
+    Weekly bonus: ≥2 rest + ≥2 strength/hypertrophy + ≥1 cardio in last 7 days → +0.30
+    Detraining: 3+ consecutive rest → fitness −0.15/day
+    Periodization: different muscle than last → +0.15 reward
+    Adaptive DOMS: same muscle 3+ days → ×4 soreness cost
+    Injury: RPE>8+CNS>0.70 OR soreness>0.75; stress event adds 0.05 CNS
     """
-
-    # ── public API ───────────────────────────────────────────────────────
 
     @staticmethod
     def transition(
@@ -122,177 +223,215 @@ class PhysiologyEngine:
         workout_category: str,
         target_muscle: str,
         intensity_rpe: int,
+        stress_event: bool = False,
+        nutrition_protocol: str = "maintenance",
     ) -> TransitionResult:
         """
-        Compute the next physiological state given the current state and a
-        trainer action.
+        Compute the next physiological state.
 
         Parameters
         ----------
-        state:
-            Current physiology snapshot.
-        workout_category:
-            One of ``"rest"``, ``"liss_cardio"``, ``"hiit"``,
-            ``"hypertrophy"``, ``"strength"`` (the ``.value`` of the enum).
-        target_muscle:
-            One of ``"none"``, ``"legs"``, ``"push"``, ``"pull"``,
-            ``"full_body"`` (the ``.value`` of the enum).
-        intensity_rpe:
-            Rate of Perceived Exertion, integer 1–10.
-
-        Returns
-        -------
-        TransitionResult
-            Contains ``next_state``, ``reward``, and ``injured`` flag.
+        state               : Current physiology snapshot.
+        workout_category    : rest | liss_cardio | hiit | hypertrophy | strength
+        target_muscle       : none | legs | push | pull | full_body
+        intensity_rpe       : 1–10 (Rate of Perceived Exertion)
+        stress_event        : Life-stress today (bad sleep, work pressure)
+        nutrition_protocol  : maintenance | surplus | deficit | high_protein
         """
-        # Normalise inputs
         workout_category = workout_category.lower().strip()
         target_muscle = target_muscle.lower().strip()
+        nutrition_protocol = nutrition_protocol.lower().strip()
 
-        # Copy mutable state so we never mutate the caller's object
         fitness = state.fitness_capacity
         cns = state.cns_fatigue
         soreness = dict(state.muscle_soreness)
         days_active = state.days_active
+        consecutive_rest = state.consecutive_rest_days
+        training_streak = state.training_streak
+        last_muscle = state.last_muscle_trained
+        consec_same = state.consecutive_same_muscle
+        muscle_history = list(state.muscle_session_history)
+        week_hist = list(state.week_history)
+        sleep = state.sleep_quality
 
         affected_keys = _MUSCLE_KEY_MAP.get(target_muscle, [])
 
-        # ── Rule 1: REST ─────────────────────────────────────────────────
+        # Compute tonight's sleep quality (propagated into next_state)
+        next_sleep = _next_sleep_quality(workout_category, intensity_rpe, stress_event, sleep)
+
+        # Update 7-day week history
+        week_hist.append(workout_category)
+        if len(week_hist) > 7:
+            week_hist = week_hist[-7:]
+
+        reward = 0.0
+
+        # ── RULE 1: REST ──────────────────────────────────────────────────
         if workout_category == "rest":
-            cns = _clamp(cns - REST_CNS_RECOVERY, FATIGUE_MIN, FATIGUE_MAX)
+            # CNS recovery: sleep quality × stress modifier
+            cns_recovery = REST_CNS_RECOVERY * sleep * (0.5 if stress_event else 1.0)
+            cns = _clamp(cns - cns_recovery, FATIGUE_MIN, FATIGUE_MAX)
             for key in soreness:
                 soreness[key] = _clamp(
-                    soreness[key] - REST_SORENESS_RECOVERY,
-                    SORENESS_MIN,
-                    SORENESS_MAX,
+                    soreness[key] - REST_SORENESS_RECOVERY, SORENESS_MIN, SORENESS_MAX
                 )
+            consecutive_rest += 1
+            training_streak = 0  # reset training streak on REST
+            reward = REWARD_REST
 
-            days_active += 1
+            # Smart rest bonus: rewarded when resting is the correct call (high CNS)
+            if state.cns_fatigue >= 0.6:
+                reward += 0.2
+
+            # Detraining: 3+ consecutive rest days
+            if consecutive_rest >= DETRAINING_REST_THRESHOLD:
+                fitness = _clamp(fitness - DETRAINING_DECAY, FITNESS_MIN, FITNESS_MAX)
+                reward -= 0.05
+
+            # Weekly periodization bonus (check after updating history)
+            reward += _weekly_periodization_bonus(week_hist)
 
             next_state = PhysiologyState(
                 fitness_capacity=_clamp(fitness, FITNESS_MIN, FITNESS_MAX),
                 cns_fatigue=cns,
-                muscle_soreness=soreness,
+                muscle_soreness={k: _clamp(v, SORENESS_MIN, SORENESS_MAX) for k, v in soreness.items()},
                 days_active=days_active,
+                sleep_quality=next_sleep,
+                consecutive_rest_days=consecutive_rest,
+                training_streak=training_streak,
+                last_muscle_trained=last_muscle,
+                consecutive_same_muscle=consec_same,
+                muscle_session_history=muscle_history,
+                week_history=week_hist,
             )
-            return TransitionResult(
-                next_state=next_state, reward=REWARD_REST, injured=False
-            )
+            return TransitionResult(next_state=next_state, reward=reward, injured=False)
 
-        # ── Rule 2: Injury check (must come before growth) ───────────────
-        # Condition A: extreme RPE when CNS is already dangerously high
-        rpe_cns_injury = (
-            intensity_rpe > INJURY_RPE_THRESHOLD
-            and cns > INJURY_CNS_THRESHOLD
-        )
+        # ── RULE 2: Injury check ──────────────────────────────────────────
+        # Stress event adds CNS overhead before checking injury threshold
+        if stress_event:
+            cns = _clamp(cns + 0.05, FATIGUE_MIN, FATIGUE_MAX)
 
-        # Condition B: training a muscle that is already very sore
+        rpe_cns_injury = (intensity_rpe > INJURY_RPE_THRESHOLD and cns > INJURY_CNS_THRESHOLD)
         sore_muscle_injury = any(
-            soreness.get(k, 0.0) > INJURY_SORENESS_THRESHOLD
-            for k in affected_keys
+            soreness.get(k, 0.0) > INJURY_SORENESS_THRESHOLD for k in affected_keys
         )
 
         if rpe_cns_injury or sore_muscle_injury:
-            # Injury occurred — state is frozen, episode should end
             next_state = PhysiologyState(
                 fitness_capacity=_clamp(fitness, FITNESS_MIN, FITNESS_MAX),
                 cns_fatigue=_clamp(cns, FATIGUE_MIN, FATIGUE_MAX),
-                muscle_soreness={
-                    k: _clamp(v, SORENESS_MIN, SORENESS_MAX)
-                    for k, v in soreness.items()
-                },
+                muscle_soreness={k: _clamp(v, SORENESS_MIN, SORENESS_MAX) for k, v in soreness.items()},
                 days_active=days_active,
+                sleep_quality=next_sleep,
+                consecutive_rest_days=0,
+                training_streak=0,
+                last_muscle_trained=last_muscle,
+                consecutive_same_muscle=0,
+                muscle_session_history=muscle_history,
+                week_history=week_hist,
             )
-            return TransitionResult(
-                next_state=next_state, reward=REWARD_INJURY, injured=True
-            )
+            return TransitionResult(next_state=next_state, reward=REWARD_INJURY, injured=True)
 
-        # ── Rule 3: Growth (productive training at sweet-spot RPE) ───────
-        if GROWTH_RPE_LOW <= intensity_rpe <= GROWTH_RPE_HIGH:
-            fitness = _clamp(
-                fitness + GROWTH_FITNESS_GAIN, FITNESS_MIN, FITNESS_MAX
-            )
-            cns = _clamp(cns + GROWTH_CNS_COST, FATIGUE_MIN, FATIGUE_MAX)
+        # Reset consecutive rest counter; increment training streak
+        consecutive_rest = 0
+        training_streak += 1
+
+        # ── Periodization bonus ───────────────────────────────────────────
+        muscle_key = target_muscle if target_muscle != "none" else None
+        periodization_bonus = 0.0
+        if muscle_key and last_muscle and muscle_key != last_muscle:
+            periodization_bonus = PERIODIZATION_BONUS
+
+        # ── Adaptive DOMS: same muscle 3+ days ───────────────────────────
+        if muscle_key and muscle_key == last_muscle:
+            consec_same += 1
+        else:
+            consec_same = 0 if muscle_key else consec_same
+
+        soreness_multiplier = 4.0 if consec_same >= 2 else 1.0
+
+        # Update muscle history (last 3)
+        if muscle_key:
+            muscle_history.append(muscle_key)
+            if len(muscle_history) > 3:
+                muscle_history = muscle_history[-3:]
+
+        # ── Nutrition multipliers ─────────────────────────────────────────
+        nut_fit   = _NUTRITION_FITNESS_MULT.get(nutrition_protocol, 1.0)
+        nut_sor   = _NUTRITION_SORENESS_MULT.get(nutrition_protocol, 1.0)
+        nut_cns   = _NUTRITION_CNS_MULT.get(nutrition_protocol, 1.0)
+
+        # ── Super-compensation window (extended by good sleep) ────────────
+        supercomp_threshold = SUPERCOMP_CNS_GREAT_SLEEP if sleep >= 0.9 else SUPERCOMP_CNS_NORMAL
+        supercomp = SUPERCOMP_FITNESS_MULTIPLIER if cns <= supercomp_threshold else 1.0
+
+        # ── RULE 3: HIIT ──────────────────────────────────────────────────
+        if workout_category == "hiit":
+            cns = _clamp(cns + HIIT_CNS_COST * nut_cns, FATIGUE_MIN, FATIGUE_MAX)
+            fitness_gain = HIIT_FITNESS_GAIN * nut_fit * (1 - cns * 0.5)
+            fitness = _clamp(fitness + fitness_gain, FITNESS_MIN, FITNESS_MAX)
             for key in affected_keys:
                 soreness[key] = _clamp(
-                    soreness[key] + GROWTH_SORENESS_COST,
-                    SORENESS_MIN,
-                    SORENESS_MAX,
+                    soreness[key] + HIIT_SORENESS_COST * soreness_multiplier * nut_sor,
+                    SORENESS_MIN, SORENESS_MAX,
                 )
+            gain = fitness - state.fitness_capacity
+            reward = 0.3 + (gain / 2.0) + periodization_bonus
             days_active += 1
 
-            next_state = PhysiologyState(
-                fitness_capacity=fitness,
-                cns_fatigue=cns,
-                muscle_soreness=soreness,
-                days_active=days_active,
-            )
-            return TransitionResult(
-                next_state=next_state, reward=REWARD_GROWTH, injured=False
-            )
+        # ── RULE 4: LISS Cardio ───────────────────────────────────────────
+        elif workout_category == "liss_cardio":
+            cns = _clamp(cns + LISS_CNS_COST * nut_cns, FATIGUE_MIN, FATIGUE_MAX)
+            fitness = _clamp(fitness + LISS_FITNESS_GAIN * nut_fit, FITNESS_MIN, FITNESS_MAX)
+            for key in affected_keys:
+                soreness[key] = _clamp(
+                    soreness[key] + LISS_SORENESS_COST * soreness_multiplier * nut_sor,
+                    SORENESS_MIN, SORENESS_MAX,
+                )
+            reward = 0.15 + periodization_bonus
+            days_active += 1
 
-        # ── Fallback: sub-optimal training (RPE too low or moderate-high) ─
-        # Still train, but no growth bonus.  Light CNS / soreness cost.
-        scale = intensity_rpe / 10.0
-        cns = _clamp(cns + 0.05 * scale, FATIGUE_MIN, FATIGUE_MAX)
-        for key in affected_keys:
-            soreness[key] = _clamp(
-                soreness[key] + 0.1 * scale,
-                SORENESS_MIN,
-                SORENESS_MAX,
-            )
-        # Small fitness bump for effort, but less than growth zone
-        fitness = _clamp(fitness + 0.2 * scale, FITNESS_MIN, FITNESS_MAX)
-        days_active += 1
+        # ── RULE 5: Growth (RPE 6–8) ──────────────────────────────────────
+        elif GROWTH_RPE_LOW <= intensity_rpe <= GROWTH_RPE_HIGH:
+            fitness_gain = BASE_GROWTH_FITNESS_GAIN * supercomp * nut_fit
+            fitness = _clamp(fitness + fitness_gain, FITNESS_MIN, FITNESS_MAX)
+            cns = _clamp(cns + GROWTH_CNS_COST * nut_cns, FATIGUE_MIN, FATIGUE_MAX)
+            for key in affected_keys:
+                soreness[key] = _clamp(
+                    soreness[key] + GROWTH_SORENESS_COST * soreness_multiplier * nut_sor,
+                    SORENESS_MIN, SORENESS_MAX,
+                )
+            gain = fitness - state.fitness_capacity
+            reward = REWARD_GROWTH_BASE * (gain / BASE_GROWTH_FITNESS_GAIN) + periodization_bonus
+            days_active += 1
+
+        # ── RULE 6: Fallback (sub-optimal RPE, no injury) ─────────────────
+        else:
+            scale = intensity_rpe / 10.0
+            cns = _clamp(cns + 0.05 * scale, FATIGUE_MIN, FATIGUE_MAX)
+            for key in affected_keys:
+                soreness[key] = _clamp(
+                    soreness[key] + 0.1 * scale * soreness_multiplier * nut_sor,
+                    SORENESS_MIN, SORENESS_MAX,
+                )
+            fitness = _clamp(fitness + 0.1 * scale * nut_fit, FITNESS_MIN, FITNESS_MAX)
+            reward = 0.05 + periodization_bonus
+            days_active += 1
+
+        # Weekly periodization bonus (check after appending to week history)
+        reward += _weekly_periodization_bonus(week_hist)
 
         next_state = PhysiologyState(
-            fitness_capacity=fitness,
-            cns_fatigue=cns,
-            muscle_soreness=soreness,
+            fitness_capacity=_clamp(fitness, FITNESS_MIN, FITNESS_MAX),
+            cns_fatigue=_clamp(cns, FATIGUE_MIN, FATIGUE_MAX),
+            muscle_soreness={k: _clamp(v, SORENESS_MIN, SORENESS_MAX) for k, v in soreness.items()},
             days_active=days_active,
+            sleep_quality=next_sleep,
+            consecutive_rest_days=consecutive_rest,
+            training_streak=training_streak,
+            last_muscle_trained=muscle_key if muscle_key else last_muscle,
+            consecutive_same_muscle=consec_same,
+            muscle_session_history=muscle_history,
+            week_history=week_hist,
         )
-        return TransitionResult(
-            next_state=next_state, reward=REWARD_NEUTRAL, injured=False
-        )
-
-
-# ── Smoke test ───────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    engine = PhysiologyEngine()
-    s = PhysiologyState()
-
-    print("=== REST ===")
-    s_high_cns = PhysiologyState(cns_fatigue=0.6, muscle_soreness={"legs": 0.5, "push": 0.3, "pull": 0.2})
-    r = engine.transition(s_high_cns, "rest", "none", 1)
-    print(f"  CNS: {s_high_cns.cns_fatigue} → {r.next_state.cns_fatigue}  (expected 0.3)")
-    print(f"  Legs soreness: {s_high_cns.muscle_soreness['legs']} → {r.next_state.muscle_soreness['legs']}  (expected 0.1)")
-    print(f"  Reward: {r.reward}  (expected +0.1)")
-    print(f"  Injured: {r.injured}  (expected False)")
-
-    print("\n=== GROWTH (RPE 7, rested push) ===")
-    r = engine.transition(s, "hypertrophy", "push", 7)
-    print(f"  Fitness: {s.fitness_capacity} → {r.next_state.fitness_capacity}  (expected 50.5)")
-    print(f"  CNS: {s.cns_fatigue} → {r.next_state.cns_fatigue}  (expected 0.1)")
-    print(f"  Push soreness: {s.muscle_soreness['push']} → {r.next_state.muscle_soreness['push']}  (expected 0.2)")
-    print(f"  Reward: {r.reward}  (expected +0.5)")
-
-    print("\n=== INJURY (RPE 9, CNS 0.8) ===")
-    s_tired = PhysiologyState(cns_fatigue=0.8)
-    r = engine.transition(s_tired, "strength", "legs", 9)
-    print(f"  Reward: {r.reward}  (expected -1.0)")
-    print(f"  Injured: {r.injured}  (expected True)")
-
-    print("\n=== INJURY (sore muscle > 0.8) ===")
-    s_sore = PhysiologyState(muscle_soreness={"legs": 0.85, "push": 0.0, "pull": 0.0})
-    r = engine.transition(s_sore, "hypertrophy", "legs", 6)
-    print(f"  Reward: {r.reward}  (expected -1.0)")
-    print(f"  Injured: {r.injured}  (expected True)")
-
-    print("\n=== SUB-OPTIMAL (RPE 4, low) ===")
-    r = engine.transition(s, "liss_cardio", "full_body", 4)
-    print(f"  Fitness: {s.fitness_capacity} → {r.next_state.fitness_capacity}")
-    print(f"  Reward: {r.reward}  (expected 0.0)")
-    print(f"  Injured: {r.injured}  (expected False)")
-
-    print("\n✓ All smoke tests complete.")
+        return TransitionResult(next_state=next_state, reward=reward, injured=False)

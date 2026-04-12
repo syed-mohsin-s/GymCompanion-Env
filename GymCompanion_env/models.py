@@ -13,9 +13,16 @@ actions (workout prescriptions) to advance the simulation.
 """
 
 from enum import Enum
-from typing import Dict
+from typing import Dict, Optional
 
-from openenv.core.env_server.types import Action, Observation
+try:
+    from openenv.core.env_server.types import Action, Observation
+except ImportError:
+    from pydantic import BaseModel, Field as _Field
+    class Action(BaseModel):
+        pass
+    class Observation(BaseModel):
+        metadata: dict = _Field(default_factory=dict)
 from pydantic import Field
 
 
@@ -40,6 +47,23 @@ class TargetMuscle(str, Enum):
     PUSH = "push"
     PULL = "pull"
     FULL_BODY = "full_body"
+
+
+class NutritionProtocol(str, Enum):
+    """
+    Daily nutrition strategy chosen by the trainer agent.
+
+    Directly affects growth rate, soreness recovery, and CNS demands:
+    - MAINTENANCE: no modifier (baseline)
+    - SURPLUS:     +20% fitness gain, +5% CNS cost (caloric excess supports growth)
+    - DEFICIT:     ×0.5 fitness gain, −10% CNS cost (caloric restriction limits gains)
+    - HIGH_PROTEIN: −20% soreness cost (protein accelerates muscle repair)
+    """
+
+    MAINTENANCE  = "maintenance"
+    SURPLUS      = "surplus"
+    DEFICIT      = "deficit"
+    HIGH_PROTEIN = "high_protein"
 
 
 # ── Observation ──────────────────────────────────────────────────────────────
@@ -86,7 +110,54 @@ class GymcompanionObservation(Observation):
     days_active: int = Field(
         default=0,
         ge=0,
-        description="Number of consecutive days the client has been active in the program.",
+        description="Total number of non-rest training days the client has completed in the episode.",
+    )
+
+    goal_progress: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Normalized progress toward the current task goal (0.0 = start, "
+            "1.0 = goal achieved). Useful for the agent to gauge how well it is doing."
+        ),
+    )
+
+    days_since_last_rest: int = Field(
+        default=0,
+        ge=0,
+        description="Number of consecutive training days since the last REST day. High values indicate overtraining risk.",
+    )
+
+    stress_event: bool = Field(
+        default=False,
+        description=(
+            "Whether a life-stress event (bad sleep, work pressure) occurred today. "
+            "A stress event halves CNS recovery on rest days and adds extra CNS cost "
+            "on training days. Agents should adapt by choosing lighter workouts or resting."
+        ),
+    )
+
+    sleep_quality: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Quality of last night's sleep (0.0 = terrible, 1.0 = perfect). "
+            "Scales CNS recovery on rest days. Sleep ≥ 0.9 extends the super-compensation "
+            "window. Stress events and very hard training reduce sleep quality."
+        ),
+    )
+
+    weekly_variety_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Diversity score of workout modalities used in the last 7 days (0.0–1.0). "
+            "Using all 5 modalities (rest, liss_cardio, hiit, hypertrophy, strength) gives 1.0. "
+            "A score ≥ 0.6 (3+ modalities) indicates good periodization."
+        ),
     )
 
 
@@ -126,7 +197,15 @@ class GymcompanionAction(Action):
         le=10,
         description=(
             "Rate of Perceived Exertion (1-10). 1 = minimal effort, "
-            "10 = maximal effort. Guides the simulator in scaling volume "
-            "and recovery impact."
+            "10 = maximal effort. Sweet spot for growth is 6-8."
+        ),
+    )
+
+    nutrition_protocol: NutritionProtocol = Field(
+        default=NutritionProtocol.MAINTENANCE,
+        description=(
+            "Daily nutrition strategy. SURPLUS (+20% gains), DEFICIT (×0.5 gains, faster CNS recovery), "
+            "HIGH_PROTEIN (−20% soreness cost), or MAINTENANCE (no modifier). "
+            "Choose wisely: surplus during injury-risk phases increases CNS overhead."
         ),
     )

@@ -10,6 +10,7 @@ from .client import GymcompanionEnv
 from .models import (
     GymcompanionAction,
     GymcompanionObservation,
+    NutritionProtocol,
     TargetMuscle,
     WorkoutCategory,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "GymcompanionAction",
     "GymcompanionObservation",
     "GymcompanionEnv",
+    "NutritionProtocol",
     "WorkoutCategory",
     "TargetMuscle",
 ]
