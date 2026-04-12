@@ -7,18 +7,12 @@ import urllib.error
 from typing import List, Optional
 from openai import OpenAI
 
-# Inject paths to handle various directory structures
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-_env_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "GymCompanion_env")
-if os.path.exists(_env_dir):
-    sys.path.insert(0, _env_dir)
-
 try:
-    from GymCompanion_env.client import GymcompanionEnv
-    from GymCompanion_env.models import GymcompanionAction, WorkoutCategory, TargetMuscle
-except ImportError:
     from client import GymcompanionEnv
     from models import GymcompanionAction, WorkoutCategory, TargetMuscle
+except ImportError:
+    from GymCompanion_env.client import GymcompanionEnv
+    from GymCompanion_env.models import GymcompanionAction, WorkoutCategory, TargetMuscle
 
 # ==========================================
 # STRICT HACKATHON MANDATORY VARIABLES

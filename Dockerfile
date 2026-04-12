@@ -13,17 +13,17 @@ ENV PYTHONUNBUFFERED=1
 ENV ENABLE_WEB_INTERFACE=true
 
 # Install dependencies (leverages Docker layer cache)
-COPY GymCompanion_env/server/requirements.txt .
+COPY server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir openenv-core uvicorn fastapi websockets
 
 # Copy application files
-COPY GymCompanion_env/openenv.yaml /app/
-COPY GymCompanion_env/README.md /app/
-COPY GymCompanion_env/models.py /app/
-COPY GymCompanion_env/client.py /app/
-COPY GymCompanion_env/inference.py /app/
-COPY GymCompanion_env/server/ /app/server/
+COPY openenv.yaml /app/
+COPY README.md /app/
+COPY models.py /app/
+COPY client.py /app/
+COPY inference.py /app/
+COPY server/ /app/server/
 
 # Hugging Face Spaces expects port 7860
 EXPOSE 7860

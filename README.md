@@ -210,18 +210,17 @@ openenv validate
 GymCompanion-Env/
 ├── Dockerfile                 # Root Dockerfile (validator-compliant)
 ├── inference.py               # Hackathon inference loop (LLM → actions)
-└── GymCompanion_env/
-    ├── client.py              # WebSocket client
-    ├── models.py              # Typed Pydantic models (Action, Observation, Enums)
-    ├── openenv.yaml           # OpenEnv manifest (5 tasks, benchmarks, schemas)
-    ├── pyproject.toml         # Project config
-    ├── README.md              # This file
-    ├── tests/
-    │   └── test_physiology.py # 33 unit tests (all passing)
-    └── server/
-        ├── app.py             # FastAPI application
-        ├── GymCompanion_env_environment.py  # Episode orchestration
-        └── physiology_engine.py             # Physics simulation engine
+├── client.py                  # WebSocket client
+├── models.py                  # Typed Pydantic models (Action, Observation, Enums)
+├── openenv.yaml               # OpenEnv manifest (5 tasks, benchmarks, schemas)
+├── pyproject.toml             # Project config
+├── README.md                  # This file
+├── LICENSE                    # License file
+├── tests/                     # Unit tests
+└── server/
+    ├── app.py                 # FastAPI application
+    ├── GymCompanion_env_environment.py  # Episode orchestration
+    └── physiology_engine.py             # Physics simulation engine
 ```
 
 ---
