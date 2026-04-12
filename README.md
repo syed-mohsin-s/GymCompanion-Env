@@ -20,7 +20,7 @@ tags:
 
 > An OpenEnv-compatible reinforcement learning environment that models a virtual human client's physiology — fitness capacity, CNS fatigue, and per-muscle-group soreness — enabling AI personal-trainer agents to learn optimal workout programming.
 
-🔗 **Live Space:** [varun5526/GymCompanion-Env]
+🔗 **Live Space:** [varun5526/GymCompanion-Env](https://huggingface.co/spaces/varun5526/GymCompanion-Env)
 
 ---
 
