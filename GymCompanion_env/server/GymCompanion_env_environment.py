@@ -142,9 +142,13 @@ class GymcompanionEnvironment(Environment):
         if task_name is None and "options" in kwargs and isinstance(kwargs["options"], dict):
             task_name = kwargs["options"].get("task_name")
 
-        cfg = TASK_CONFIGS.get(task_name, TASK_CONFIGS["couch-to-5k"])
+        cfg = TASK_CONFIGS.get(task_name)
+        if cfg is None:
+            # Unknown task — fall back to couch-to-5k so config and task_name stay in sync
+            task_name = "couch-to-5k"
+            cfg = TASK_CONFIGS["couch-to-5k"]
         self._task_config = cfg
-        self._task_name = task_name or "couch-to-5k"
+        self._task_name = task_name
 
         self._physiology = PhysiologyState(
             fitness_capacity=cfg["fitness_capacity"],
@@ -251,6 +255,9 @@ class GymcompanionEnvironment(Environment):
             - cns_penalty
             - leg_penalty
         )
+        # ── Gate 2 enforcement on FINAL score (not just fitness component) ──
+        if not goal_met:
+            raw = min(raw, 0.35)
         return round(max(0.0, min(1.0, raw)), 4)
 
     # ── observation builder ───────────────────────────────────────────────

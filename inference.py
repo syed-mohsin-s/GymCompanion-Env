@@ -159,14 +159,15 @@ SYSTEM_PROMPTS = {
 # ==========================================
 # OBSERVATION BUILDER
 # ==========================================
-def build_obs_dict(obs, task_name: str, steps_taken: int) -> dict:
+def build_obs_dict(obs, task_name: str, steps_taken: int, training_streak: int = 0) -> dict:
     return {
         "fitness_capacity": obs.fitness_capacity,
         "cns_fatigue": obs.cns_fatigue,
         "muscle_soreness": obs.muscle_soreness,
         "days_active": obs.days_active,
         "goal_progress": getattr(obs, "goal_progress", 0.0),
-        "days_since_last_rest": getattr(obs, "days_since_last_rest", 0),
+        # days_since_last_rest = training streak (days trained without a rest)
+        "days_since_last_rest": training_streak,
         "stress_event": getattr(obs, "stress_event", False),
         "sleep_quality": getattr(obs, "sleep_quality", 0.8),
         "weekly_variety_score": getattr(obs, "weekly_variety_score", 0.0),
@@ -207,6 +208,7 @@ def run_inference():
 
                 system_prompt = SYSTEM_PROMPTS.get(task_name, DEFAULT_SYSTEM_PROMPT)
                 steps_taken = 0
+                training_streak = 0  # days trained consecutively without REST
                 rewards: List[float] = []
                 success = False
 
@@ -217,18 +219,9 @@ def run_inference():
 
                     while not done and steps_taken < MAX_STEPS:
                         obs = result.observation
-                        obs_dict = {
-                            "fitness_capacity": obs.fitness_capacity,
-                            "cns_fatigue": obs.cns_fatigue,
-                            "muscle_soreness": obs.muscle_soreness,
-                            "days_active": obs.days_active,
-                            "goal_progress": getattr(obs, "goal_progress", 0.0),
-                            "days_since_last_rest": getattr(obs, "days_since_last_rest", 0),
-                            "stress_event": getattr(obs, "stress_event", False),
-                            "task": task_name,
-                            "step": steps_taken + 1,
-                            "steps_remaining": MAX_STEPS - steps_taken,
-                        }
+                        # Use build_obs_dict so ALL fields (sleep_quality, weekly_variety_score,
+                        # days_since_last_rest) are consistently sent to the model.
+                        obs_dict = build_obs_dict(obs, task_name, steps_taken, training_streak)
                         messages.append({"role": "user", "content": json.dumps(obs_dict)})
 
                         action_str = ""
@@ -271,6 +264,13 @@ def run_inference():
                         rewards.append(reward)
                         steps_taken += 1
                         done = result.done
+
+                        # Track training streak for correct days_since_last_rest
+                        last_cat = action.workout_category.value if hasattr(action.workout_category, "value") else str(action.workout_category)
+                        if last_cat == "rest":
+                            training_streak = 0
+                        else:
+                            training_streak += 1
 
                         log_step(
                             step=steps_taken,

@@ -18,11 +18,11 @@ from typing import Dict, Optional
 try:
     from openenv.core.env_server.types import Action, Observation
 except ImportError:
-    from pydantic import BaseModel
+    from pydantic import BaseModel, Field as _Field
     class Action(BaseModel):
         pass
     class Observation(BaseModel):
-        metadata: dict = {}
+        metadata: dict = _Field(default_factory=dict)
 from pydantic import Field
 
 
