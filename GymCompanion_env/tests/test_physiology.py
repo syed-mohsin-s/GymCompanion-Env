@@ -15,8 +15,9 @@ import sys
 import os
 import importlib.util
 
-# Load physiology_engine directly without triggering server/__init__.py
-# (which imports openenv and would fail outside the uv venv)
+# Load physiology_engine directly without importing through server/__init__.py,
+# which imports GymCompanion_env_environment; that module then imports
+# openenv.core... and would fail outside the uv venv.
 _engine_path = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "server", "physiology_engine.py")
 )
